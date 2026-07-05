@@ -1,0 +1,172 @@
+* { box-sizing: border-box; }
+:root {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f6f8f7;
+  color: #112527;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #eef5f1;
+}
+.app-shell {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+}
+.app-header {
+  padding: 28px 24px;
+  border-radius: 26px;
+  background: white;
+  box-shadow: 0 24px 48px rgba(13, 53, 42, 0.08);
+  margin-bottom: 20px;
+}
+.eyebrow {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #10a57b;
+}
+h1 { margin: 0; font-size: clamp(2rem, 2.5vw, 2.85rem); }
+.subtitle { margin: 14px 0 0; color: #4f6d61; line-height: 1.6; }
+.app-header .main-title { color: #088f62; }
+.tab-bar { display: flex; gap: 12px; margin-bottom: 18px; }
+.tab-button {
+  flex: 1;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: #f7fdf9;
+  color: #1c453b;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tab-button.active { background: #10a57b; color: white; }
+.panel { display: grid; gap: 18px; }
+.hidden { display: none; }
+#checkin-card,
+.stats-card,
+.form-card,
+.list-card,
+.summary-card { background: white; border-radius: 24px; padding: 24px 34px; box-shadow: 0 18px 36px rgba(22, 59, 43, 0.08); }
+.checkin-card h2,
+.stats-card h2,
+.form-card h2,
+.list-card h2 { margin: 0 0 16px; font-size: 1.2rem; }
+.primary-button,
+.secondary-button,
+.view-button,
+button[type='submit'] {
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  font: inherit;
+}
+.primary-button {
+  width: 100%;
+  padding: 16px;
+  font-weight: 700;
+}
+.primary-button.active {
+  background: #10a57b;
+  color: white;
+}
+.primary-button:not(.active) {
+  background: #d6dbd7;
+  color: #5f746d;
+}
+.secondary-button {
+  padding: 12px 16px;
+  background: #f4f8f4;
+  color: #196141;
+}
+.view-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.view-button {
+  flex: 1;
+  padding: 14px 16px;
+  background: #eef8f2;
+  color: #205943;
+  font-weight: 700;
+}
+.view-button.active { background: #10a57b; color: white; }
+.value-text { margin: 14px 0 0; color: #3f6959; }
+.picker-row { display: flex; justify-content: flex-start; margin-top: 20px; }
+.picker-label { display: grid; gap: 10px; color: #1a3d34; font-weight: 600; }
+.picker-label input { width: 220px; border: 1px solid #d7e4de; border-radius: 16px; padding: 12px 14px; background: #fafdf9; }
+.stats-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 22px 0 0; }
+.summary-item { display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: 18px; background: #f7fbf8; border: 1px solid #e5efe6; }
+
+.single-summary { padding: 18px 16px; }
+.duration-label { margin-bottom: 16px; }
+.duration-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.duration-inputs input { width: 100%; }
+.summary-label { color: #6f8a7f; font-size: 0.95rem; }
+.summary-item strong { font-size: 1.5rem; }
+label { display: grid; gap: 10px; margin-bottom: 16px; color: #1a3d34; font-weight: 600; }
+input, textarea { width: 100%; border: 1px solid #d7e4de; border-radius: 16px; padding: 14px 16px; background: #fafdf9; font: inherit; }
+textarea { min-height: 100px; resize: vertical; }
+button[type='submit'] { width: 100%; background: #10a57b; color: white; padding: 14px 18px; font-weight: 700; }
+.list-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 10px; }
+#readingList { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+.reading-item { padding: 20px; border-radius: 18px; background: #f7fbf8; border: 1px solid #ebf2ed; }
+.reading-item h3 { margin: 0 0 10px; font-size: 1rem; }
+.reading-meta { display: flex; flex-wrap: wrap; gap: 12px; color: #61756d; font-size: 0.95rem; }
+.reading-notes { margin: 14px 0 0; color: #35483e; line-height: 1.6; }
+.reading-actions { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+.small-button { border-radius: 14px; background: #e4f6eb; color: #22664d; padding: 10px 14px; font-weight: 700; }
+.chart-grid { display: grid; gap: 10px; }
+.chart-grid { display: grid; gap: 10px; padding-top: 18px; }
+.grid-row { display: grid; gap: 10px; }
+.week-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.month-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.year-grid { grid-template-columns: repeat(14, minmax(0, 1fr)); }
+.grid-day {
+  min-height: 88px;
+  padding: 12px;
+  border-radius: 16px;
+  background: #eef7f0;
+  border: 1px solid #d7e4de;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+.week-grid .grid-day { min-height: 84px; }
+.month-grid .grid-day { min-height: 56px; padding: 10px; }
+.year-grid .grid-day { min-height: 46px; padding: 8px; }
+.grid-read { background: #10a57b; color: white; border-color: #0e8d6a; }
+.grid-empty { background: #f1f4f1; color: #6f8a7f; }
+.grid-day-number { font-size: 1rem; font-weight: 800; }
+.grid-day-label { font-size: 0.78rem; color: inherit; opacity: 0.85; }
+/* yearly compact view: each month is a row of small day squares */
+.year-compact { display: grid; gap: 8px; }
+.month-row { display: flex; width: 100%; align-items: flex-start; gap: 12px; padding: 6px 8px; }
+.month-label { width: 64px; color: #345; font-weight: 600; padding-top: 6px; }
+.month-days { display: flex; gap: 10px; flex-wrap: wrap; overflow-x: hidden; padding: 8px 0; align-items: flex-start; flex: 1; max-width: calc(100% - 80px); }
+.month-days .grid-day { width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 6px; display:flex; align-items:center; justify-content:center; }
+
+/* show the day number in compact rows, hide the label */
+.month-days .grid-day .grid-day-number { display: block; font-size: 13px; line-height: 34px; }
+.month-days .grid-day .grid-day-label { display: none; }
+/* hide big number for month/year compact views */
+.month-grid .grid-day-number,
+.year-grid .grid-day-number {
+  display: none;
+}
+
+/* allow horizontal scroll for long month/year grids so screenshots can be stitched */
+.chart-grid { overflow-x: auto; }
+.year-grid { grid-auto-flow: column; grid-auto-columns: 46px; }
+
+@media (max-width: 840px) {
+  .stats-summary { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .summary-card { grid-template-columns: 1fr; }
+  .tab-bar { flex-direction: column; }
+  .list-header { flex-direction: column; align-items: stretch; }
+  .week-grid, .month-grid, .year-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
