@@ -74,11 +74,7 @@ pip install -r requirements.txt
 python3 app.py
 ```
 
-5. Open the app in your browser:
-
-```text
-http://127.0.0.1:5000
-```
+5. Open the app in your browser
 
 ## Usage
 
