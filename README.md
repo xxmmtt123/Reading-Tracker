@@ -78,10 +78,6 @@ Then open:
 
 5. Open the app in your browser:
 
-```text
-http://127.0.0.1:5000
-```
-
 If port `5000` is already in use, run the app on another port:
 If port `5000` is already in use:
 
@@ -90,11 +86,9 @@ PORT=5001 python3 app.py
 PORT=5001 python app.py
 ```
 
-Then open:
 ## Project Structure
 
-```text
-http://127.0.0.1:5001
+```
 .
 ├── app.py
 ├── data.json
