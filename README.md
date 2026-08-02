@@ -22,7 +22,7 @@ A simple web app for tracking daily reading habits and completed books.
 Check in daily and review reading activity across weekly, monthly, and yearly views.
 
 <img src="screenshots/daily-view.png" alt="Daily check-in view" width="420">
-<img src="screenshots/monthly-view.png" alt="Monthly reading view" width="420">
+<img src="screenshots/monthly-view1.png" alt="Monthly reading view" width="420">
 <img src="screenshots/yearly-view.png" alt="Yearly reading view" width="420">
 
 ### Data Analysis
