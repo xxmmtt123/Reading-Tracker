@@ -377,9 +377,9 @@ function renderMonthlyAnalysis(data = currentData) {
     years.length ? renderAnalysisSection({
       title: 'Yearly Reading Trend',
       controls: `
-        <input type="number" id="yearlyStart" min="1900" max="2100" value="${analysisFilters.yearlyStart}" aria-label="Yearly start year" />
+        <button type="button" class="analysis-picker-button" data-picker-type="year" data-filter-key="yearlyStart" aria-label="Yearly start year">${analysisFilters.yearlyStart}</button>
         <span>to</span>
-        <input type="number" id="yearlyEnd" min="1900" max="2100" value="${analysisFilters.yearlyEnd}" aria-label="Yearly end year" />
+        <button type="button" class="analysis-picker-button" data-picker-type="year" data-filter-key="yearlyEnd" aria-label="Yearly end year">${analysisFilters.yearlyEnd}</button>
       `,
       chart: renderTrendChart({
         items: filteredYears,
@@ -392,9 +392,9 @@ function renderMonthlyAnalysis(data = currentData) {
     visibleMonths.length ? renderAnalysisSection({
       title: 'Monthly Reading Trend',
       controls: `
-        <input type="month" id="monthlyStart" value="${analysisFilters.monthlyStart}" aria-label="Monthly start month" />
+        <button type="button" class="analysis-picker-button" data-picker-type="month" data-filter-key="monthlyStart" aria-label="Monthly start month">${analysisFilters.monthlyStart}</button>
         <span>to</span>
-        <input type="month" id="monthlyEnd" value="${analysisFilters.monthlyEnd}" aria-label="Monthly end month" />
+        <button type="button" class="analysis-picker-button" data-picker-type="month" data-filter-key="monthlyEnd" aria-label="Monthly end month">${analysisFilters.monthlyEnd}</button>
       `,
       chart: renderTrendChart({
         items: filteredMonths,
@@ -407,9 +407,9 @@ function renderMonthlyAnalysis(data = currentData) {
     renderAnalysisSection({
       title: 'Weekly Reading Trend',
       controls: `
-        <input type="date" id="weeklyStart" value="${analysisFilters.weeklyStart}" aria-label="Weekly start date" />
+        <button type="button" class="analysis-picker-button" data-picker-type="date" data-filter-key="weeklyStart" aria-label="Weekly start date">${analysisFilters.weeklyStart}</button>
         <span>to</span>
-        <input type="date" id="weeklyEnd" value="${analysisFilters.weeklyEnd}" aria-label="Weekly end date" />
+        <button type="button" class="analysis-picker-button" data-picker-type="date" data-filter-key="weeklyEnd" aria-label="Weekly end date">${analysisFilters.weeklyEnd}</button>
       `,
       chart: renderBarChart({
         items: weeklyData,
@@ -424,22 +424,203 @@ function renderMonthlyAnalysis(data = currentData) {
 }
 
 function attachAnalysisFilterHandlers() {
-  [
-    ['yearlyStart', 'yearlyStart'],
-    ['yearlyEnd', 'yearlyEnd'],
-    ['monthlyStart', 'monthlyStart'],
-    ['monthlyEnd', 'monthlyEnd'],
-    ['weeklyStart', 'weeklyStart'],
-    ['weeklyEnd', 'weeklyEnd'],
-  ].forEach(([id, key]) => {
-    const input = document.getElementById(id);
-    if (!input) return;
-    input.addEventListener('change', () => {
-      analysisFilters[key] = input.value;
-      renderMonthlyAnalysis(currentData);
+  document.querySelectorAll('[data-filter-key]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      openAnalysisPicker(button);
     });
   });
 }
+
+function openAnalysisPicker(targetButton) {
+  const targetKey = targetButton.dataset.filterKey;
+  const pickerType = targetButton.dataset.pickerType;
+  const currentValue = analysisFilters[targetKey] || new Date().toISOString().slice(0, pickerType === 'date' ? 10 : 7);
+  const existingPicker = document.querySelector('.analysis-picker');
+  if (existingPicker) existingPicker.remove();
+
+  const picker = document.createElement('div');
+  picker.className = 'analysis-picker';
+  picker.dataset.pendingValue = currentValue;
+  picker.dataset.ownerKey = targetKey;
+  picker.innerHTML = buildAnalysisPickerContent(pickerType, currentValue);
+  picker.addEventListener('click', (event) => event.stopPropagation());
+  picker.addEventListener('mousedown', (event) => event.stopPropagation());
+  targetButton.insertAdjacentElement('afterend', picker);
+
+  attachOpenPickerControls(picker, targetKey, pickerType);
+  const pickerInput = picker.querySelector('[data-picker-input]');
+  if (pickerInput) {
+    window.setTimeout(() => {
+      pickerInput.focus();
+      pickerInput.select();
+    }, 0);
+  }
+}
+
+function buildAnalysisPickerContent(type, currentValue, displayYear) {
+  const year = displayYear || Number(currentValue.slice(0, 4)) || new Date().getFullYear();
+  if (type === 'year') {
+    const startYear = year - 5;
+    const years = Array.from({ length: 12 }, (_, index) => (startYear + index).toString());
+    return buildPickerGrid(year, years, currentValue, 'year');
+  }
+  if (type === 'date') {
+    const month = currentValue.slice(5, 7) || '01';
+    const dayCount = new Date(year, Number(month), 0).getDate();
+    const days = Array.from({ length: dayCount }, (_, index) => (index + 1).toString().padStart(2, '0'));
+    return buildPickerGrid(year, days.map((day) => `${year}-${month}-${day}`), currentValue, 'date', month);
+  }
+  const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  return buildPickerGrid(year, months.map((month) => `${year}-${month}`), currentValue, 'month');
+}
+
+function buildPickerGrid(year, values, currentValue, type, month = '') {
+  const buttonLabel = (value) => {
+    if (type === 'year') return value;
+    if (type === 'date') return value.slice(-2);
+    return value.slice(-2);
+  };
+  const title = type === 'date' ? `${year}-${month}` : year;
+  const previousAttribute = type === 'date' ? 'data-month-step="-1"' : 'data-year-step="-1"';
+  const nextAttribute = type === 'date' ? 'data-month-step="1"' : 'data-year-step="1"';
+  const inputLabel = type === 'year' ? 'YYYY' : type === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
+  const inputMaxLength = type === 'year' ? 4 : type === 'month' ? 7 : 10;
+  return `
+    <div class="analysis-picker-header">
+      <button type="button" ${previousAttribute}>&lt;</button>
+      <strong>${title}</strong>
+      <button type="button" ${nextAttribute}>&gt;</button>
+    </div>
+    <label class="analysis-picker-input-label">
+      <span>${inputLabel}</span>
+      <input type="text" data-picker-input value="${currentValue}" placeholder="${inputLabel}" inputmode="numeric" maxlength="${inputMaxLength}" />
+    </label>
+    <div class="analysis-picker-grid ${type === 'year' ? 'year-picker-grid' : ''}">
+      ${values.map((value) => {
+        const active = value === currentValue ? ' active' : '';
+        return `<button type="button" class="analysis-picker-option${active}" data-picker-value="${value}">${buttonLabel(value)}</button>`;
+      }).join('')}
+    </div>
+    <div class="analysis-picker-actions">
+      <button type="button" data-picker-cancel>Cancel</button>
+      <button type="button" data-picker-confirm>Confirm</button>
+    </div>
+  `;
+}
+
+function normalizePickerValue(value, type) {
+  const trimmed = value.trim();
+  if (type === 'year') {
+    return /^\d{4}$/.test(trimmed) ? trimmed : '';
+  }
+  if (type === 'month') {
+    const compact = trimmed.replace(/\D/g, '');
+    const monthValue = /^\d{6}$/.test(compact)
+      ? `${compact.slice(0, 4)}-${compact.slice(4, 6)}`
+      : trimmed;
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthValue)) return '';
+    return monthValue;
+  }
+
+  const compact = trimmed.replace(/\D/g, '');
+  const dateValue = /^\d{8}$/.test(compact)
+    ? `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`
+    : trimmed;
+  if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(dateValue)) return '';
+  const [year, month, day] = dateValue.split('-').map(Number);
+  const parsed = new Date(year, month - 1, day);
+  const isRealDate = parsed.getFullYear() === year
+    && parsed.getMonth() === month - 1
+    && parsed.getDate() === day;
+  return isRealDate ? dateValue : '';
+}
+
+function confirmAnalysisPicker(picker, targetKey, pickerType) {
+  const input = picker.querySelector('[data-picker-input]');
+  const nextValue = normalizePickerValue(input.value, pickerType);
+  if (!nextValue) {
+    input.classList.add('invalid');
+    input.focus();
+    return;
+  }
+  analysisFilters[targetKey] = nextValue;
+  picker.remove();
+  renderMonthlyAnalysis(currentData);
+}
+
+function attachOpenPickerControls(picker, targetKey, pickerType) {
+  picker.querySelectorAll('[data-year-step]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const baseYear = Number(picker.dataset.year);
+      picker.dataset.year = (baseYear + Number(button.dataset.yearStep)).toString();
+      picker.innerHTML = buildAnalysisPickerContent(pickerType, picker.dataset.pendingValue, Number(picker.dataset.year));
+      attachOpenPickerControls(picker, targetKey, pickerType);
+    });
+  });
+  picker.querySelectorAll('[data-month-step]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const pending = picker.dataset.pendingValue || analysisFilters[targetKey] || new Date().toISOString().slice(0, 10);
+      const [year, month] = pending.split('-').map(Number);
+      const nextDate = new Date(year, month - 1 + Number(button.dataset.monthStep), 1);
+      const nextValue = `${nextDate.getFullYear()}-${(nextDate.getMonth() + 1).toString().padStart(2, '0')}-01`;
+      picker.dataset.pendingValue = nextValue;
+      picker.dataset.year = nextDate.getFullYear().toString();
+      picker.innerHTML = buildAnalysisPickerContent(pickerType, nextValue);
+      attachOpenPickerControls(picker, targetKey, pickerType);
+    });
+  });
+  picker.querySelectorAll('[data-picker-value]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      picker.dataset.pendingValue = button.dataset.pickerValue;
+      picker.querySelector('[data-picker-input]').value = button.dataset.pickerValue;
+      picker.querySelectorAll('[data-picker-value]').forEach((option) => option.classList.remove('active'));
+      button.classList.add('active');
+    });
+  });
+  picker.querySelector('[data-picker-input]').addEventListener('input', (event) => {
+    event.stopPropagation();
+    event.target.classList.remove('invalid');
+    const normalizedValue = normalizePickerValue(event.target.value, pickerType);
+    if (!normalizedValue) return;
+    picker.dataset.pendingValue = normalizedValue;
+    picker.querySelectorAll('[data-picker-value]').forEach((option) => {
+      option.classList.toggle('active', option.dataset.pickerValue === normalizedValue);
+    });
+  });
+  picker.querySelector('[data-picker-input]').addEventListener('keydown', (event) => {
+    event.stopPropagation();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      confirmAnalysisPicker(picker, targetKey, pickerType);
+    }
+    if (event.key === 'Escape') {
+      picker.remove();
+    }
+  });
+  picker.querySelector('[data-picker-cancel]').addEventListener('click', (event) => {
+    event.stopPropagation();
+    picker.remove();
+  });
+  picker.querySelector('[data-picker-confirm]').addEventListener('click', (event) => {
+    event.stopPropagation();
+    confirmAnalysisPicker(picker, targetKey, pickerType);
+  });
+  picker.dataset.year = (picker.dataset.year || (analysisFilters[targetKey] || '').slice(0, 4) || new Date().getFullYear()).toString();
+}
+
+document.addEventListener('click', (event) => {
+  const picker = document.querySelector('.analysis-picker');
+  if (!picker) return;
+  const clickedInsidePicker = picker.contains(event.target);
+  const clickedPickerButton = event.target.closest('[data-filter-key]');
+  if (!clickedInsidePicker && !clickedPickerButton) {
+    picker.remove();
+  }
+});
 
 function showDataAnalysis() {
   analysisVisible = true;
@@ -863,6 +1044,7 @@ viewButtons.forEach((button) => {
   button.addEventListener('click', () => {
     hideDataAnalysis();
     currentView = button.dataset.view;
+    setActiveViewButton(currentView);
     setPeriodType(currentView);
     loadStats(currentView);
   });

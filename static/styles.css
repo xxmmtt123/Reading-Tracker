@@ -10,9 +10,10 @@ body {
   background: #eef5f1;
 }
 .app-shell {
-  max-width: 940px;
+  width: min(96vw, 1440px);
+  max-width: none;
   margin: 0 auto;
-  padding: 24px 20px 40px;
+  padding: 28px 18px 48px;
 }
 .app-header {
   padding: 28px 24px;
@@ -44,13 +45,13 @@ h1 { margin: 0; font-size: clamp(2rem, 2.5vw, 2.85rem); }
   cursor: pointer;
 }
 .tab-button.active { background: #10a57b; color: white; }
-.panel { display: grid; gap: 18px; }
+.panel { display: grid; gap: 22px; }
 .hidden { display: none; }
 #checkin-card,
 .stats-card,
 .form-card,
 .list-card,
-.summary-card { background: white; border-radius: 24px; padding: 24px 34px; box-shadow: 0 18px 36px rgba(22, 59, 43, 0.08); }
+.summary-card { background: white; border-radius: 24px; padding: 28px 38px; box-shadow: 0 18px 36px rgba(22, 59, 43, 0.08); }
 .summary-card.single-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .library-chart-card {
   display: block;
@@ -113,7 +114,12 @@ button[type='submit'] {
   color: #205943;
   font-weight: 700;
 }
-.view-button.active { background: #10a57b; color: white; }
+.view-button.active,
+.view-button[data-view].active,
+#dataAnalysis.active {
+  background: #10a57b;
+  color: white;
+}
 .value-text { margin: 14px 0 0; color: #3f6959; }
 .picker-row { display: flex; justify-content: flex-start; margin-top: 20px; }
 .picker-label { display: grid; gap: 10px; color: #1a3d34; font-weight: 600; }
@@ -178,6 +184,7 @@ button[type='submit'] {
   font-size: 1.05rem;
 }
 .analysis-date-controls {
+  position: relative;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -185,10 +192,97 @@ button[type='submit'] {
   font-size: 0.9rem;
   font-weight: 700;
 }
-.analysis-date-controls input {
+.analysis-picker-button {
   width: 142px;
+  border: 1px solid #d7e4de;
   border-radius: 12px;
   padding: 9px 10px;
+  background: #fafdf9;
+  color: #112527;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+.analysis-picker {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 300px;
+  padding: 14px;
+  border: 1px solid #d7e4de;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 18px 36px rgba(22, 59, 43, 0.16);
+}
+.analysis-picker-header {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.analysis-picker-header strong { text-align: center; }
+.analysis-picker-header button,
+.analysis-picker-option,
+.analysis-picker-actions button {
+  border: 1px solid #d7e4de;
+  border-radius: 10px;
+  background: #f7fbf8;
+  color: #1a3d34;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+.analysis-picker-header button { height: 44px; }
+.analysis-picker-input-label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: #5f746d;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.analysis-picker-input-label input {
+  width: 100%;
+  border: 1px solid #d7e4de;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fafdf9;
+  color: #112527;
+  font: inherit;
+  font-weight: 800;
+}
+.analysis-picker-input-label input:focus {
+  outline: 2px solid #10a57b;
+  outline-offset: 2px;
+}
+.analysis-picker-input-label input.invalid {
+  border-color: #c43f3f;
+  background: #fff8f8;
+}
+.analysis-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.analysis-picker-option { height: 46px; }
+.year-picker-grid { grid-template-columns: repeat(4, 1fr); }
+.analysis-picker-option.active {
+  background: #10a57b;
+  border-color: #0e8d6a;
+  color: white;
+}
+.analysis-picker-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+.analysis-picker-actions [data-picker-confirm] {
+  background: #10a57b;
+  border-color: #0e8d6a;
+  color: white;
 }
 .analysis-chart {
   display: grid;
@@ -311,6 +405,85 @@ button[type='submit'] { width: 100%; background: #10a57b; color: white; padding:
 /* allow horizontal scroll for long month/year grids so screenshots can be stitched */
 .chart-grid { overflow-x: auto; }
 .year-grid { grid-auto-flow: column; grid-auto-columns: 46px; }
+
+@media (min-width: 900px) {
+  body { font-size: 18px; }
+  h1 { font-size: clamp(2.4rem, 2.8vw, 3.25rem); }
+  .subtitle { font-size: 1.08rem; }
+  .tab-button,
+  .view-button,
+  .primary-button,
+  button[type='submit'] {
+    font-size: 1.08rem;
+    padding: 18px 20px;
+  }
+  .checkin-card h2,
+  .stats-card h2,
+  .form-card h2,
+  .list-card h2 {
+    font-size: 1.45rem;
+  }
+  .summary-label { font-size: 1.05rem; }
+  .summary-item strong { font-size: 1.9rem; }
+  .picker-label { font-size: 1.08rem; }
+  .period-control { grid-template-columns: 54px minmax(220px, 280px) 54px; }
+  .period-step-button {
+    width: 54px;
+    height: 54px;
+    font-size: 1.45rem;
+  }
+  .picker-label input,
+  input,
+  textarea {
+    font-size: 1.05rem;
+  }
+  .week-grid .grid-day { min-height: 116px; }
+  .month-grid .grid-day { min-height: 78px; }
+  .grid-day-number { font-size: 1.2rem; }
+  .grid-day-label { font-size: 0.9rem; }
+  .stats-summary { gap: 20px; }
+  .summary-item { padding: 24px; }
+  .library-chart { min-height: 320px; }
+  .analysis-chart { min-height: 360px; }
+  .year-compact { gap: 14px; }
+  .month-row { gap: 18px; padding: 8px 10px; }
+  .month-label {
+    width: 96px;
+    font-size: 1.2rem;
+  }
+  .month-label small { font-size: 0.9rem; }
+  .month-days {
+    gap: 12px;
+    max-width: calc(100% - 116px);
+  }
+  .month-days .grid-day {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    border-radius: 8px;
+  }
+  .month-days .grid-day .grid-day-number {
+    font-size: 16px;
+    line-height: 44px;
+  }
+  .analysis-section-header h4,
+  .library-chart-card h3 {
+    font-size: 1.25rem;
+  }
+  .analysis-date-controls {
+    gap: 12px;
+    font-size: 1.05rem;
+  }
+  .analysis-picker-button {
+    width: 172px;
+    min-height: 48px;
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-size: 1.05rem;
+  }
+  .reading-item h3 { font-size: 1.15rem; }
+  .reading-meta { font-size: 1.05rem; }
+}
 
 @media (max-width: 840px) {
   .stats-summary { grid-template-columns: 1fr; }
