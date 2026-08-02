@@ -21,22 +21,22 @@ A simple web app for tracking daily reading habits and completed books.
 
 Check in daily and review reading activity across weekly, monthly, and yearly views.
 
-<img src="screenshots/daily-view.png" alt="Daily check-in view" width="500">
-<img src="screenshots/monthly-view1.png" alt="Monthly reading view" width="500">
-<img src="screenshots/yearly-view.png" alt="Yearly reading view" width="500">
+<img src="screenshots/daily-view.png" alt="Daily check-in view" width="700">
+<img src="screenshots/monthly-view1.png" alt="Monthly reading view" width="700">
+<img src="screenshots/yearly-view.png" alt="Yearly reading view" width="700">
 
 ### Data Analysis
 
 Analyze yearly, monthly, and weekday reading trends with custom date ranges.
 
-<img src="screenshots/data-analysis-view.png" alt="Data analysis view" width="500">
+<img src="screenshots/data-analysis-view.png" alt="Data analysis view" width="700">
 
 ### Library and Export
 
 Manage finished books, view annual book trends, and export reading history as CSV files.
 
-<img src="screenshots/books-view.png" alt="Book library view" width="500">
-<img src="screenshots/export-view.png" alt="Export history view" width="500">
+<img src="screenshots/books-view.png" alt="Book library view" width="700">
+<img src="screenshots/export-view.png" alt="Export history view" width="700">
 
 ## Project structure
 
