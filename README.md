@@ -4,12 +4,6 @@ This app was created using **VS Code Agent Mode** and developed through collabor
 A simple web app for tracking daily reading habits and completed books.
 
 ## Key features
-- Python
-- Flask
-- HTML
-- CSS
-- JavaScript
-
 - Daily check-in button for marking reading completion today
 - Weekly / monthly / yearly reading history views
 - Data analysis dashboard with:
