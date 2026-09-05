@@ -78,8 +78,10 @@ def get_year_days(year_value):
 
 def compute_summary(days, checkins):
     read_set = set(checkins)
-    total = len(days)
-    read_days = sum(1 for day in days if day.isoformat() in read_set)
+    today = date.today()
+    elapsed_days = [day for day in days if day <= today]
+    total = len(elapsed_days)
+    read_days = sum(1 for day in elapsed_days if day.isoformat() in read_set)
     rate = round((read_days / total) * 100) if total else 0
     streak = 0
     current = 0
@@ -143,6 +145,7 @@ def add_or_update_reading():
                 item.update({
                     'title': payload['title'].strip(),
                     'duration': payload.get('duration', '').strip(),
+                    'startDate': payload.get('startDate', '').strip(),
                     'date': payload['date'],
                     'notes': payload.get('notes', '').strip(),
                 })
@@ -153,6 +156,7 @@ def add_or_update_reading():
             'id': new_id,
             'title': payload['title'].strip(),
             'duration': payload.get('duration', '').strip(),
+            'startDate': payload.get('startDate', '').strip(),
             'date': payload['date'],
             'notes': payload.get('notes', '').strip(),
         })

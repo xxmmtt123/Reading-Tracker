@@ -5,14 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#10a57b" />
   <title>Reading Tracker</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=34" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=108" />
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}" />
 </head>
 <body>
   <div class="app-shell">
     <header class="app-header">
-      <div>
+      <div class="header-title-row">
         <h1 class="main-title">Reading Track</h1>
+        <div class="size-control" aria-label="Interface size">
+          <button type="button" class="size-button" data-ui-size="small" aria-label="Small interface size">S</button>
+          <button type="button" class="size-button active" data-ui-size="medium" aria-label="Medium interface size">M</button>
+          <button type="button" class="size-button" data-ui-size="large" aria-label="Large interface size">L</button>
+        </div>
       </div>
       <p class="subtitle">Check if you read today, switch weekly/monthly/yearly view, and record what books you read.</p>
     </header>
@@ -50,6 +55,7 @@
               <button type="button" id="previousPeriod" class="period-step-button" aria-label="Previous period">&lt;</button>
               <input id="periodPicker" type="week" />
               <button type="button" id="nextPeriod" class="period-step-button" aria-label="Next period">&gt;</button>
+              <button type="button" id="currentPeriod" class="period-current-button">Today</button>
             </span>
           </label>
         </div>
@@ -59,12 +65,16 @@
             <strong id="summaryDays">0</strong>
           </div>
           <div class="summary-item">
+            <span class="summary-label">Longest streak</span>
+            <strong id="summaryStreak">0</strong>
+          </div>
+          <div class="summary-item">
             <span class="summary-label">Completion</span>
             <strong id="summaryRate">0%</strong>
           </div>
           <div class="summary-item">
-            <span class="summary-label">Longest streak</span>
-            <strong id="summaryStreak">0</strong>
+            <span class="summary-label">Avg Completion</span>
+            <strong id="summaryAvgCompletion">0%</strong>
           </div>
         </div>
         <div id="analysisPanel" class="analysis-panel hidden" aria-live="polite"></div>
@@ -91,6 +101,14 @@
         <div id="libraryChart" class="library-chart"></div>
       </div>
 
+      <div class="summary-card library-chart-card">
+        <div class="chart-header">
+          <h3>Book reading timeline</h3>
+          <button type="button" id="exportBookTimelineImage" class="secondary-button chart-action-button">Export image</button>
+        </div>
+        <div id="bookTimelineChart" class="library-chart library-timeline-chart"></div>
+      </div>
+
       <div class="form-card">
         <h2>What did you read?</h2>
         <form id="readingForm">
@@ -106,10 +124,18 @@
             </div>
           </label>
           <label>
+            Date started (optional)
+            <div class="custom-date-field">
+              <input type="text" id="readingStartDate" placeholder="YYYY-MM-DD" readonly />
+              <button type="button" class="date-picker-button" data-date-target="readingStartDatePicker" aria-label="Open start date picker">📅</button>
+              <input type="date" id="readingStartDatePicker" class="date-picker-overlay" />
+            </div>
+          </label>
+          <label>
             Date finished
             <div class="custom-date-field">
               <input type="text" id="readingDate" placeholder="YYYY-MM-DD" readonly required />
-              <button type="button" class="date-picker-button" aria-label="Open date picker">📅</button>
+              <button type="button" class="date-picker-button" data-date-target="readingDatePicker" aria-label="Open finish date picker">📅</button>
               <input type="date" id="readingDatePicker" class="date-picker-overlay" />
             </div>
           </label>
@@ -117,20 +143,34 @@
             Notes (optional)
             <textarea id="bookNotes" placeholder="Short notes or summary..."></textarea>
           </label>
-          <button type="submit">Save reading</button>
+          <div class="form-actions">
+            <button type="submit" id="saveReadingButton">Save reading</button>
+            <button type="button" id="cancelEditReading" class="secondary-action hidden">Cancel edit</button>
+          </div>
         </form>
       </div>
 
       <div class="list-card">
         <div class="list-header">
             <h2>Reading history</h2>
-            <button type="button" id="exportBookHistory" class="small-button">Export reading history</button>
+            <div class="reading-history-controls">
+              <span class="analysis-preset-group" data-history-range-type="readingHistory">
+                <button type="button" class="analysis-preset-button" data-history-preset="previousYear" aria-label="Previous year">&lt;</button>
+                <button type="button" class="analysis-preset-button" data-history-preset="year">This year</button>
+                <button type="button" class="analysis-preset-button" data-history-preset="all">All</button>
+                <button type="button" class="analysis-preset-button" data-history-preset="nextYear" aria-label="Next year">&gt;</button>
+              </span>
+              <button type="button" class="analysis-picker-button" data-picker-type="date" data-history-filter-key="start" aria-label="Reading history start date"></button>
+              <span>to</span>
+              <button type="button" class="analysis-picker-button" data-picker-type="date" data-history-filter-key="end" aria-label="Reading history end date"></button>
+              <button type="button" id="exportBookHistory" class="small-button">Export reading history</button>
+            </div>
         </div>
         <ul id="readingList"></ul>
       </div>
     </section>
   </div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=34"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=108"></script>
 </body>
 </html>
