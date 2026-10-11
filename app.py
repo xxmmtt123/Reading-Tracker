@@ -10,11 +10,15 @@ app = Flask(__name__, static_folder='static', static_url_path='')
 
 def load_data():
     if not os.path.exists(DATA_FILE):
-        save_data({'readings': [], 'checkins': []})
+        save_data({'readings': [], 'checkins': [], 'manualReadingTime': {'yearly': {}, 'monthly': {}}})
 
     with open(DATA_FILE, 'r', encoding='utf-8') as file:
         data = json.load(file)
 
+    data.setdefault('checkins', [])
+    data.setdefault('manualReadingTime', {})
+    data['manualReadingTime'].setdefault('yearly', {})
+    data['manualReadingTime'].setdefault('monthly', {})
     data['readings'] = sorted(
         data.get('readings', []),
         key=lambda item: datetime.fromisoformat(item['date']),
@@ -24,6 +28,7 @@ def load_data():
 
 
 def save_data(data):
+    data.setdefault('manualReadingTime', {'yearly': {}, 'monthly': {}})
     data['readings'] = sorted(
         data.get('readings', []),
         key=lambda item: datetime.fromisoformat(item['date']),
@@ -167,6 +172,31 @@ def add_or_update_reading():
         key=lambda item: datetime.fromisoformat(item['date']),
         reverse=True,
     )
+
+    save_data(data)
+    return jsonify(data)
+
+
+@app.route('/api/analysis-time', methods=['POST'])
+def save_analysis_time():
+    payload = request.get_json(force=True)
+    range_type = payload.get('rangeType')
+    key = (payload.get('key') or '').strip()
+    minutes = int(payload.get('minutes') or 0)
+
+    if range_type not in ('yearly', 'monthly') or not key:
+        return jsonify({'message': 'Missing range type or period'}), 400
+    if minutes < 0:
+        return jsonify({'message': 'Reading time cannot be negative'}), 400
+
+    data = load_data()
+    data.setdefault('manualReadingTime', {'yearly': {}, 'monthly': {}})
+    data['manualReadingTime'].setdefault(range_type, {})
+
+    if minutes:
+        data['manualReadingTime'][range_type][key] = minutes
+    else:
+        data['manualReadingTime'][range_type].pop(key, None)
 
     save_data(data)
     return jsonify(data)

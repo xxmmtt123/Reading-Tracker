@@ -57,6 +57,9 @@ let analysisFilters = {
   weeklyCompletionStart: '',
   weeklyCompletionEnd: '',
 };
+let yearlyTrendMetric = 'both';
+let monthlyTrendMetric = 'both';
+let analysisTimeSelectedMonth = '';
 
 const analysisFilterPairs = {
   yearly: ['yearlyStart', 'yearlyEnd'],
@@ -235,11 +238,22 @@ function getDurationMinutes(value) {
   return (Number(parsed.hours) || 0) * 60 + (Number(parsed.minutes) || 0);
 }
 
+function getManualReadingTime(data, rangeType, key) {
+  return Number(data.manualReadingTime?.[rangeType]?.[key] || 0);
+}
+
 function formatDurationMinutes(totalMinutes) {
   if (!totalMinutes) return '0m';
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${hours ? `${hours}h` : ''}${hours && minutes ? ' ' : ''}${minutes ? `${minutes}m` : ''}`;
+}
+
+function formatDurationAxisTick(totalMinutes) {
+  if (!totalMinutes) return '0m';
+  const hours = Math.floor(totalMinutes / 60);
+  if (hours) return `${hours}h`;
+  return `${totalMinutes}m`;
 }
 
 function buildMonthlyAnalysis(data) {
@@ -267,8 +281,24 @@ function buildMonthlyAnalysis(data) {
     if (!reading.date) return;
     const month = ensureMonth(getMonthKey(reading.date));
     month.books += 1;
-    month.minutes += getDurationMinutes(reading.duration);
   });
+
+  Object.entries(data.manualReadingTime?.monthly || {}).forEach(([monthKey, minutes]) => {
+    ensureMonth(monthKey).minutes += Number(minutes) || 0;
+  });
+
+  const monthKeys = Object.keys(monthMap).sort();
+  if (monthKeys.length > 1) {
+    const [startYear, startMonth] = monthKeys[0].split('-').map(Number);
+    const [endYear, endMonth] = monthKeys[monthKeys.length - 1].split('-').map(Number);
+    const startIndex = startYear * 12 + startMonth - 1;
+    const endIndex = endYear * 12 + endMonth - 1;
+    for (let index = startIndex; index <= endIndex; index += 1) {
+      const year = Math.floor(index / 12);
+      const month = (index % 12) + 1;
+      ensureMonth(`${year}-${month.toString().padStart(2, '0')}`);
+    }
+  }
 
   return Object.values(monthMap)
     .sort((a, b) => a.key.localeCompare(b.key))
@@ -280,23 +310,37 @@ function buildMonthlyAnalysis(data) {
 
 function buildYearlyAnalysis(data) {
   const yearMap = {};
+  const minutesMap = {};
+  const timeStartMonthByYear = {};
   (data.checkins || []).forEach((iso) => {
     const { year } = parseDateParts(iso);
     yearMap[year] = (yearMap[year] || 0) + 1;
   });
+  Object.entries(data.manualReadingTime?.monthly || {}).forEach(([monthKey, minutes]) => {
+    const year = monthKey.slice(0, 4);
+    const totalMinutes = Number(minutes) || 0;
+    minutesMap[year] = (minutesMap[year] || 0) + totalMinutes;
+    if (totalMinutes > 0 && /^\d{4}-\d{2}$/.test(monthKey)) {
+      const firstMonth = timeStartMonthByYear[year];
+      if (!firstMonth || monthKey < firstMonth) timeStartMonthByYear[year] = monthKey;
+    }
+  });
   const today = new Date();
   const currentYear = today.getFullYear();
-  return Object.keys(yearMap)
+  const years = [...new Set([...Object.keys(yearMap), ...Object.keys(minutesMap)])];
+  return years
     .map(Number)
     .sort((a, b) => a - b)
     .map((year) => {
       const start = new Date(year, 0, 1);
       const end = year === currentYear ? today : new Date(year, 11, 31);
       const totalDays = Math.round((end - start) / 86400000) + 1;
-      const readDays = yearMap[year];
+      const readDays = yearMap[year] || 0;
       return {
         key: year.toString(),
         readDays,
+        minutes: minutesMap[year] || 0,
+        timeStartMonth: timeStartMonthByYear[year] || '',
         totalDays,
         rate: Math.round((readDays / totalDays) * 100),
       };
@@ -498,6 +542,51 @@ function renderAnalysisSection({ title, controls, chart }) {
     </section>`;
 }
 
+function getCurrentMonthKey() {
+  return formatDateISO(new Date()).slice(0, 7);
+}
+
+function getAnalysisTimeMonthOptions(data, selectedMonth) {
+  const monthSet = new Set([selectedMonth, getCurrentMonthKey()]);
+  (data.checkins || []).forEach((iso) => monthSet.add(getMonthKey(iso)));
+  (data.readings || []).forEach((reading) => {
+    if (reading.date) monthSet.add(getMonthKey(reading.date));
+  });
+  Object.keys(data.manualReadingTime?.monthly || {}).forEach((month) => monthSet.add(month));
+  return [...monthSet].filter(Boolean).sort((a, b) => b.localeCompare(a));
+}
+
+function renderAnalysisTimeEntry(rangeType, periodKey, data) {
+  const activePeriodKey = rangeType === 'monthly'
+    ? (analysisTimeSelectedMonth || periodKey || getCurrentMonthKey())
+    : periodKey;
+  const actualSavedMinutes = getManualReadingTime(data, rangeType, activePeriodKey);
+  const saved = actualSavedMinutes ? parseDuration(formatDurationMinutes(actualSavedMinutes)) : { hours: '', minutes: '' };
+  const periodLabel = rangeType === 'yearly' ? 'Year' : 'Month';
+  const placeholder = rangeType === 'yearly' ? '2026' : '2026-09';
+  const periodInput = rangeType === 'monthly'
+    ? `<span class="analysis-time-period-control">
+        <button type="button" data-analysis-time-step="-1" aria-label="Previous month">&lt;</button>
+        <select class="analysis-time-month-list" data-analysis-time-key data-analysis-time-month-list aria-label="Choose month">
+          ${getAnalysisTimeMonthOptions(data, activePeriodKey).map((month) => `<option value="${escapeAttr(month)}" ${month === activePeriodKey ? 'selected' : ''}>${escapeHtml(month)}</option>`).join('')}
+        </select>
+        <button type="button" data-analysis-time-step="1" aria-label="Next month">&gt;</button>
+      </span>`
+    : `<input type="text" data-analysis-time-key value="${escapeAttr(activePeriodKey || '')}" placeholder="${placeholder}" aria-label="${periodLabel}" />`;
+  return `
+    <form class="analysis-time-entry" data-analysis-time-entry="${rangeType}">
+      <span class="analysis-time-caption">Reading time</span>
+      ${periodInput}
+      ${rangeType === 'monthly' ? `
+        <button type="button" class="analysis-time-current" data-analysis-time-current>This month</button>
+      ` : ''}
+      <input type="number" data-analysis-time-hours value="${escapeAttr(saved.hours)}" min="0" placeholder="hours" aria-label="hours" />
+      <input type="number" data-analysis-time-minutes value="${escapeAttr(saved.minutes)}" min="0" max="59" placeholder="mins" aria-label="minutes" />
+      <button type="submit" class="analysis-time-save">Save</button>
+      <button type="button" class="analysis-time-clear" data-analysis-time-clear>Clear</button>
+    </form>`;
+}
+
 function renderAnalysisPresets(rangeType) {
   const activePreset = getActiveAnalysisPreset(rangeType);
   return `
@@ -506,6 +595,28 @@ function renderAnalysisPresets(rangeType) {
       <button type="button" class="analysis-preset-button ${activePreset === 'year' ? 'active' : ''}" data-range-preset="year">This year</button>
       <button type="button" class="analysis-preset-button ${activePreset === 'all' ? 'active' : ''}" data-range-preset="all">All</button>
       <button type="button" class="analysis-preset-button analysis-year-step" data-range-preset="nextYear" aria-label="Next year">&gt;</button>
+    </span>`;
+}
+
+function renderYearlyMetricControls() {
+  return renderMetricControls('yearly', yearlyTrendMetric);
+}
+
+function renderMonthlyMetricControls() {
+  return renderMetricControls('monthly', monthlyTrendMetric);
+}
+
+function renderMetricControls(rangeType, activeMetric) {
+  const options = [
+    ['count', 'Count'],
+    ['time', 'Time'],
+    ['both', 'Both'],
+  ];
+  return `
+    <span class="analysis-preset-group analysis-metric-group" aria-label="${rangeType} trend metric">
+      ${options.map(([value, label]) => `
+        <button type="button" class="analysis-preset-button ${activeMetric === value ? 'active' : ''}" data-analysis-metric="${value}" data-metric-range="${rangeType}">${label}</button>
+      `).join('')}
     </span>`;
 }
 
@@ -638,6 +749,169 @@ function renderTrendChart({ items, xAxisLabel, yAxisLabel, itemLabel, pointLabel
         <text x="12" y="${padding + innerHeight / 2}" text-anchor="middle" font-size="12" fill="#5f746d" transform="rotate(-90 12,${padding + innerHeight / 2})">${yAxisLabel}</text>
       </svg>
     </div>`;
+}
+
+function renderPeriodMetricChart({ items, metric, xAxisLabel, itemLabel, ariaLabel }) {
+  if (!items.length) return renderEmptyAnalysisChart('No data in this range.');
+
+  const pointGap = 82;
+  const shouldFit = items.length <= 12;
+  const svgWidth = shouldFit ? 720 : Math.max(720, items.length * pointGap + 120);
+  const isTimeOnly = metric === 'time';
+  const isBoth = metric === 'both';
+  const isMonthly = xAxisLabel === 'Month';
+  const svgHeight = isBoth && isMonthly ? 350 : 320;
+  const padding = isTimeOnly ? 124 : 54;
+  const rightPadding = isBoth ? 84 : 54;
+  const topPadding = isBoth ? (isMonthly ? 96 : 66) : 54;
+  const bottomPadding = 50;
+  const innerWidth = svgWidth - padding - rightPadding;
+  const innerHeight = svgHeight - topPadding - bottomPadding;
+  const xStep = items.length > 1 ? innerWidth / (items.length - 1) : innerWidth;
+  const maxCount = Math.max(...items.map((item) => item.readDays), 1);
+  const maxMinutes = Math.max(...items.map((item) => item.minutes || 0), 1);
+  const primaryMax = isTimeOnly ? maxMinutes : maxCount;
+  const primaryLabel = isTimeOnly ? 'Reading time' : 'Read days';
+  const formatPrimary = (value) => (isTimeOnly ? formatDurationAxisTick(Math.round(value)) : Math.round(value));
+
+  const points = items.map((item, index) => {
+    const x = items.length > 1 ? padding + index * xStep : padding + innerWidth / 2;
+    const countY = topPadding + innerHeight - (item.readDays / maxCount) * innerHeight;
+    const timeY = topPadding + innerHeight - ((item.minutes || 0) / maxMinutes) * innerHeight;
+    const y = isTimeOnly ? timeY : countY;
+    return { ...item, x, y, countY, timeY };
+  });
+  const today = new Date();
+  const currentKey = xAxisLabel === 'Month'
+    ? `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}`
+    : today.getFullYear().toString();
+  const defaultPoint = [...points].reverse().find((point) => point.key <= currentKey) || points[points.length - 1];
+
+  const lineFor = (valueKey) => points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${valueKey === 'time' ? point.timeY : point.countY}`)
+    .join(' ');
+
+  const gridLines = [0, 0.25, 0.5, 0.75, 1].map((t) => {
+    const y = topPadding + t * innerHeight;
+    const primaryTick = formatPrimary(primaryMax * (1 - t));
+    const timeTick = formatDurationAxisTick(Math.round(maxMinutes * (1 - t)));
+    const gridLine = t === 1
+      ? ''
+      : `<line x1="${padding}" y1="${y}" x2="${padding + innerWidth}" y2="${y}" stroke="#d7e4de" stroke-width="1" />`;
+    return `
+      <g>
+        ${gridLine}
+        <text x="${padding - 10}" y="${y + 4}" text-anchor="end" font-size="11" fill="#5f746d">${primaryTick}</text>
+        ${isBoth ? `<text x="${padding + innerWidth + 10}" y="${y + 4}" text-anchor="start" font-size="11" fill="#256b86">${timeTick}</text>` : ''}
+      </g>`;
+  }).join('');
+
+  const yearLabels = points
+    .map((point, index) => {
+      const labelEvery = Math.max(1, Math.ceil(items.length / 8));
+      if (index % labelEvery !== 0 && index !== points.length - 1) return '';
+      return `<text x="${point.x}" y="${svgHeight - 24}" text-anchor="middle" font-size="11" fill="#5f746d">${itemLabel(point)}</text>`;
+    })
+    .join('');
+
+  const countNodes = points.map((point, index) => {
+    const isLastPoint = index === points.length - 1;
+    const labelX = isBoth && isLastPoint ? point.x - (isMonthly ? 30 : 54) : point.x;
+    const labelTop = Math.max(12, point.countY - (isMonthly ? 42 : (isBoth && isLastPoint ? 68 : 50)));
+    return `
+      <g class="chart-tooltip-target" data-tooltip="${escapeAttr(`${point.key}\nRead days: ${point.readDays}/${point.totalDays}\nCompletion: ${point.rate}%\nReading time: ${formatDurationMinutes(point.minutes || 0)}`)}">
+        <circle cx="${point.x}" cy="${point.countY}" r="10" fill="transparent" />
+        <circle cx="${point.x}" cy="${point.countY}" r="5" fill="#10a57b" />
+      </g>
+      <g aria-hidden="true">
+        <text x="${labelX}" y="${labelTop + 14}" text-anchor="middle" stroke="white" stroke-width="4" stroke-linejoin="round" paint-order="stroke">
+          <tspan x="${labelX}" font-size="13" font-weight="800" fill="#184d3d">${point.readDays}</tspan>
+          <tspan x="${labelX}" dy="16" font-size="10" font-weight="700" fill="#5f746d">${point.rate}%</tspan>
+        </text>
+      </g>`;
+  }).join('');
+
+  const timeNodes = points.map((point, index) => {
+    const showTimeLabel = isMonthly || (point.minutes || 0) > 0;
+    const labelText = formatDurationMinutes(point.minutes || 0);
+    const timeStartLabel = !isMonthly && point.key === '2023' && point.timeStartMonth
+      ? new Intl.DateTimeFormat('en-US', { month: 'short' }).format(new Date(Number(point.timeStartMonth.slice(0, 4)), Number(point.timeStartMonth.slice(5)) - 1, 1))
+      : '';
+    const isLastPoint = index === points.length - 1;
+    const nearCount = Math.abs(point.timeY - point.countY) < 44;
+    const boundaryShift = index === 0 ? 18 : (isLastPoint ? -18 : 0);
+    const timeLabelX = isBoth
+      ? point.x + (isMonthly ? boundaryShift : (isLastPoint ? -16 : 0))
+      : point.x;
+    const timeLabelY = isBoth && isMonthly
+      ? Math.min(topPadding + innerHeight - 12, point.timeY + (nearCount ? 40 : 30))
+      : (isBoth
+        ? (nearCount
+          ? Math.min(topPadding + innerHeight - 18, point.timeY + 24)
+          : Math.max(topPadding + 12, point.timeY - 14))
+        : point.timeY - 12);
+    const timeAnchor = isBoth && isMonthly && index === 0
+      ? 'start'
+      : (isBoth && (isLastPoint || (isMonthly && index > 0)) ? 'end' : 'middle');
+    return `
+      <g class="chart-tooltip-target" data-tooltip="${escapeAttr(`${point.key}\nReading time: ${formatDurationMinutes(point.minutes || 0)}\nRead days: ${point.readDays}/${point.totalDays}\nCompletion: ${point.rate}%`)}">
+        <circle cx="${point.x}" cy="${point.timeY}" r="10" fill="transparent" />
+        <circle cx="${point.x}" cy="${point.timeY}" r="5" fill="#2f8fb5" />
+      </g>
+      ${showTimeLabel ? `
+        <g aria-hidden="true">
+          <text x="${timeLabelX}" y="${timeLabelY}" text-anchor="${timeAnchor}" font-size="11" font-weight="800" fill="#256b86" stroke="white" stroke-width="4" stroke-linejoin="round" paint-order="stroke">
+            <tspan x="${timeLabelX}">${labelText}</tspan>
+            ${timeStartLabel ? `<tspan x="${timeLabelX}" dy="12" font-size="9.5" font-weight="700">from ${timeStartLabel}</tspan>` : ''}
+          </text>
+        </g>` : ''}`;
+  }).join('');
+
+  const legend = isBoth ? `
+    <g aria-hidden="true">
+      <circle cx="${padding + 5}" cy="26" r="4" fill="#10a57b" />
+      <text x="${padding + 16}" y="30" font-size="11" font-weight="800" fill="#184d3d">Read days</text>
+      <circle cx="${padding + 136}" cy="26" r="4" fill="#2f8fb5" />
+      <text x="${padding + 148}" y="30" font-size="11" font-weight="800" fill="#256b86">Reading time</text>
+    </g>` : '';
+
+  return `
+    <div class="analysis-chart ${shouldFit ? '' : 'trend-scroll-chart'}" ${shouldFit ? '' : `data-default-x="${defaultPoint ? defaultPoint.x : padding}"`}>
+      <svg viewBox="0 0 ${svgWidth} ${svgHeight}" ${shouldFit ? '' : `style="width: ${svgWidth}px; max-width: none;"`} aria-label="${ariaLabel}">
+        ${legend}
+        <path d="M ${padding + 0.5} ${topPadding + 0.5} V ${topPadding + innerHeight + 0.5} H ${padding + innerWidth + 0.5}" fill="none" stroke="#203c31" stroke-width="1" shape-rendering="crispEdges" />
+        ${isBoth ? `<line x1="${padding + innerWidth}" y1="${topPadding}" x2="${padding + innerWidth}" y2="${topPadding + innerHeight}" stroke="#256b86" stroke-width="1" opacity="0.65" />` : ''}
+        ${gridLines}
+        ${isTimeOnly || isBoth ? `<path d="${lineFor('time')}" fill="none" stroke="#2f8fb5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" ${isBoth ? 'stroke-dasharray="5 4"' : ''} />` : ''}
+        ${!isTimeOnly ? `<path d="${lineFor('count')}" fill="none" stroke="#10a57b" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />` : ''}
+        ${isTimeOnly || isBoth ? timeNodes : ''}
+        ${!isTimeOnly ? countNodes : ''}
+        ${yearLabels}
+        <text x="${padding + innerWidth / 2}" y="${svgHeight - 4}" text-anchor="middle" font-size="12" fill="#5f746d">${xAxisLabel}</text>
+        <text x="12" y="${topPadding + innerHeight / 2}" text-anchor="middle" font-size="12" fill="#5f746d" transform="rotate(-90 12,${topPadding + innerHeight / 2})">${primaryLabel}</text>
+        ${isBoth ? `<text x="${svgWidth - 12}" y="${topPadding + innerHeight / 2}" text-anchor="middle" font-size="12" fill="#256b86" transform="rotate(90 ${svgWidth - 12},${topPadding + innerHeight / 2})">Reading time</text>` : ''}
+      </svg>
+    </div>`;
+}
+
+function renderYearlyMetricChart(items, metric) {
+  return renderPeriodMetricChart({
+    items,
+    metric,
+    xAxisLabel: 'Year',
+    itemLabel: (item) => item.key,
+    ariaLabel: 'Yearly Reading Trend chart',
+  });
+}
+
+function renderMonthlyMetricChart(items, metric) {
+  return renderPeriodMetricChart({
+    items,
+    metric,
+    xAxisLabel: 'Month',
+    itemLabel: (item) => item.key,
+    ariaLabel: 'Monthly Reading Trend chart',
+  });
 }
 
 function renderBarChart({ items, xAxisLabel, yAxisLabel, ariaLabel }) {
@@ -816,7 +1090,7 @@ function scrollChartToDefault(container) {
 function renderMonthlyAnalysis(data = currentData) {
   if (!analysisPanel) return;
   const months = buildMonthlyAnalysis(data);
-  const firstActiveIndex = months.findIndex((month) => month.readDays > 0);
+  const firstActiveIndex = months.findIndex((month) => month.readDays > 0 || month.minutes > 0);
   const visibleMonths = firstActiveIndex === -1 ? [] : months.slice(firstActiveIndex);
   const years = buildYearlyAnalysis(data);
   setDefaultAnalysisFilters(visibleMonths, years);
@@ -869,45 +1143,23 @@ function renderMonthlyAnalysis(data = currentData) {
     years.length ? renderAnalysisSection({
       title: 'Yearly Reading Trend',
       controls: `
+        ${renderYearlyMetricControls()}
         <button type="button" class="analysis-picker-button" data-picker-type="year" data-filter-key="yearlyStart" aria-label="Yearly start year">${analysisFilters.yearlyStart}</button>
         <span>to</span>
         <button type="button" class="analysis-picker-button" data-picker-type="year" data-filter-key="yearlyEnd" aria-label="Yearly end year">${analysisFilters.yearlyEnd}</button>
       `,
-      chart: renderTrendChart({
-        items: filteredYears,
-        xAxisLabel: 'Year',
-        yAxisLabel: 'Read days',
-        itemLabel: (item) => item.key,
-        pointLabelRenderer: (item) => `
-          <text x="${item.x}" y="${item.y - 26}" text-anchor="middle">
-            <tspan x="${item.x}" font-size="13" font-weight="800" fill="#184d3d">${item.readDays}</tspan>
-            <tspan x="${item.x}" dy="17" font-size="10" font-weight="700" fill="#5f746d">${item.rate}%</tspan>
-          </text>`,
-        tooltipLabel: (item) => `${item.key}\nRead days: ${item.readDays}/${item.totalDays}\nCompletion: ${item.rate}%`,
-        ariaLabel: 'Yearly Reading Trend chart',
-      }),
+      chart: renderYearlyMetricChart(filteredYears, yearlyTrendMetric),
     }) : '',
     visibleMonths.length ? renderAnalysisSection({
       title: 'Monthly Reading Trend',
       controls: `
+        ${renderMonthlyMetricControls()}
         ${renderAnalysisPresets('monthly')}
         <button type="button" class="analysis-picker-button" data-picker-type="month" data-filter-key="monthlyStart" aria-label="Monthly start month">${analysisFilters.monthlyStart}</button>
         <span>to</span>
         <button type="button" class="analysis-picker-button" data-picker-type="month" data-filter-key="monthlyEnd" aria-label="Monthly end month">${analysisFilters.monthlyEnd}</button>
       `,
-      chart: renderTrendChart({
-        items: filteredMonths,
-        xAxisLabel: 'Month',
-        yAxisLabel: 'Read days',
-        itemLabel: (item) => item.key,
-        pointLabelRenderer: (item) => `
-          <text x="${item.x}" y="${item.y - 26}" text-anchor="middle">
-            <tspan x="${item.x}" font-size="13" font-weight="800" fill="#184d3d">${item.readDays}</tspan>
-            <tspan x="${item.x}" dy="17" font-size="10" font-weight="700" fill="#5f746d">${item.rate}%</tspan>
-          </text>`,
-        tooltipLabel: (item) => `${item.key}\nRead days: ${item.readDays}/${item.totalDays}\nCompletion: ${item.rate}%`,
-        ariaLabel: 'Monthly Reading Trend chart',
-      }),
+      chart: `${renderMonthlyMetricChart(filteredMonths, monthlyTrendMetric)}${renderAnalysisTimeEntry('monthly', analysisFilters.monthlyEnd, data)}`,
     }) : '',
     renderAnalysisSection({
       title: 'Weekly Completion Trend',
@@ -949,6 +1201,31 @@ function attachAnalysisFilterHandlers() {
       applyAnalysisPreset(button.closest('[data-range-type]').dataset.rangeType, button.dataset.rangePreset);
     });
   });
+  document.querySelectorAll('[data-analysis-metric]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (button.dataset.metricRange === 'monthly') {
+        monthlyTrendMetric = button.dataset.analysisMetric;
+      } else {
+        yearlyTrendMetric = button.dataset.analysisMetric;
+      }
+      renderMonthlyAnalysis(currentData);
+    });
+  });
+  document.querySelectorAll('[data-analysis-time-entry]').forEach((form) => {
+    form.addEventListener('submit', submitAnalysisTimeEntry);
+  });
+  document.querySelectorAll('[data-analysis-time-month-list]').forEach((select) => {
+    select.addEventListener('change', () => setAnalysisTimeFormMonth(select.closest('[data-analysis-time-entry]'), select.value));
+  });
+  document.querySelectorAll('[data-analysis-time-step]').forEach((button) => {
+    button.addEventListener('click', () => stepAnalysisTimeMonth(button));
+  });
+  document.querySelectorAll('[data-analysis-time-current]').forEach((button) => {
+    button.addEventListener('click', () => setAnalysisTimeFormMonth(button.closest('[data-analysis-time-entry]'), getCurrentMonthKey()));
+  });
+  document.querySelectorAll('[data-analysis-time-clear]').forEach((button) => {
+    button.addEventListener('click', () => clearAnalysisTimeEntry(button));
+  });
   document.querySelectorAll('[data-table-target]').forEach((button) => {
     button.addEventListener('click', () => {
       const table = document.getElementById(button.dataset.tableTarget);
@@ -973,6 +1250,87 @@ function attachReadingHistoryFilterHandlers() {
       openAnalysisPicker(button);
     });
   });
+}
+
+function submitAnalysisTimeEntry(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  saveAnalysisTimeEntry(form);
+}
+
+function saveAnalysisTimeEntry(form, overrideMinutes = null) {
+  const rangeType = form.dataset.analysisTimeEntry;
+  const key = form.querySelector('[data-analysis-time-key]')?.value.trim();
+  const hours = Number(form.querySelector('[data-analysis-time-hours]')?.value || 0);
+  const minutes = Number(form.querySelector('[data-analysis-time-minutes]')?.value || 0);
+  const totalMinutes = overrideMinutes === null ? hours * 60 + minutes : overrideMinutes;
+  const validKey = rangeType === 'yearly' ? /^\d{4}$/.test(key) : /^\d{4}-\d{2}$/.test(key);
+
+  if (!validKey) {
+    alert(rangeType === 'yearly' ? 'Please enter a year like 2026.' : 'Please enter a month like 2026-09.');
+    return;
+  }
+  if (hours < 0 || minutes < 0 || minutes > 59) {
+    alert('Please enter a valid reading time.');
+    return;
+  }
+
+  fetch('/api/analysis-time', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      rangeType,
+      key,
+      minutes: totalMinutes,
+    }),
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      if (rangeType === 'monthly') analysisTimeSelectedMonth = key;
+      currentData = data;
+      renderMonthlyAnalysis(data);
+    });
+}
+
+function clearAnalysisTimeEntry(button) {
+  const form = button.closest('[data-analysis-time-entry]');
+  if (!form) return;
+  const hoursInput = form.querySelector('[data-analysis-time-hours]');
+  const minutesInput = form.querySelector('[data-analysis-time-minutes]');
+  if (hoursInput) hoursInput.value = '';
+  if (minutesInput) minutesInput.value = '';
+  saveAnalysisTimeEntry(form, 0);
+}
+
+function stepAnalysisTimeMonth(button) {
+  const form = button.closest('[data-analysis-time-entry]');
+  const select = form?.querySelector('[data-analysis-time-month-list]');
+  if (!select) return;
+  const current = /^\d{4}-\d{2}$/.test(select.value)
+    ? select.value
+    : getCurrentMonthKey();
+  const [year, month] = current.split('-').map(Number);
+  const date = new Date(year, month - 1 + Number(button.dataset.analysisTimeStep || 0), 1);
+  const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+  if (![...select.options].some((option) => option.value === monthKey)) {
+    select.add(new Option(monthKey, monthKey));
+  }
+  setAnalysisTimeFormMonth(form, monthKey);
+}
+
+function setAnalysisTimeFormMonth(form, monthKey) {
+  if (!form || !/^\d{4}-\d{2}$/.test(monthKey)) return;
+  analysisTimeSelectedMonth = monthKey;
+  const input = form.querySelector('[data-analysis-time-key]');
+  if (input) input.value = monthKey;
+  const select = form.querySelector('[data-analysis-time-month-list]');
+  if (select) select.value = monthKey;
+  const savedMinutes = getManualReadingTime(currentData, 'monthly', monthKey);
+  const saved = savedMinutes ? parseDuration(formatDurationMinutes(savedMinutes)) : { hours: '', minutes: '' };
+  const hoursInput = form.querySelector('[data-analysis-time-hours]');
+  const minutesInput = form.querySelector('[data-analysis-time-minutes]');
+  if (hoursInput) hoursInput.value = saved.hours || '';
+  if (minutesInput) minutesInput.value = saved.minutes || '';
 }
 
 function getAnalysisBounds(rangeType) {
@@ -1430,19 +1788,23 @@ function renderBooksPerYearChart(readings) {
     return;
   }
 
-  const values = years.map((year) => counts[year]);
-  const maxValue = Math.max(...values, 1);
+  const maxValue = Math.max(...Object.values(counts), 1);
   const svgWidth = 560;
-  const svgHeight = 240;
-  const padding = 40;
+  const svgHeight = 265;
+  const padding = 44;
   const innerWidth = svgWidth - padding * 2;
   const innerHeight = svgHeight - padding * 2;
   const xStep = years.length > 1 ? innerWidth / (years.length - 1) : innerWidth;
 
   const points = years.map((year, index) => {
     const x = padding + index * xStep;
-    const y = padding + innerHeight - (counts[year] / maxValue) * innerHeight;
-    return { x, y, year, value: counts[year] };
+    const value = counts[year];
+    return {
+      x,
+      year,
+      value,
+      y: padding + innerHeight - (value / maxValue) * innerHeight,
+    };
   });
 
   const linePath = points
@@ -1502,6 +1864,7 @@ function renderBookTimelineChart(readings) {
       const end = endValue ? new Date(`${endValue}T00:00:00`) : null;
       return {
         title: item.title || 'Untitled book',
+        duration: item.duration || '',
         startValue,
         endValue,
         hasExplicitStart: Boolean(startValue),
@@ -1540,9 +1903,9 @@ function renderBookTimelineChart(readings) {
   const rightPadding = 96;
   const axisY = 56;
   const laneTop = 116;
-  const laneGap = 98;
+  const laneGap = 112;
   const cardWidth = 360;
-  const cardHeight = 76;
+  const cardHeight = 92;
   const innerWidth = svgWidth - leftPadding - rightPadding;
   const xForDate = (date) => leftPadding + ((date.getTime() - minTime) / (maxTime - minTime)) * innerWidth;
   const lanes = [];
@@ -1609,12 +1972,15 @@ function renderBookTimelineChart(readings) {
     const title = escapeHtml(item.title.length > 40 ? `${item.title.slice(0, 39)}...` : item.title);
     const dateText = escapeHtml(item.hasExplicitStart ? `${item.startValue} - ${item.endValue}` : `End ${item.endValue}`);
     const period = escapeHtml(readingPeriod);
+    const durationText = item.duration
+      ? `<text x="${cardX + cardWidth / 2}" y="${laneY + 77}" text-anchor="middle" font-size="11" fill="#61756d">Reading time: ${escapeHtml(item.duration)}</text>`
+      : '';
     const hasRange = item.start && item.end && item.startValue !== item.endValue;
     const itemAxisY = axisY + 12 + item.axisOffset;
     const periodText = period
-      ? `<text x="${cardX + cardWidth / 2}" y="${laneY + 62}" text-anchor="middle" font-size="11" fill="#61756d">${period}</text>`
+      ? `<text x="${cardX + cardWidth / 2}" y="${laneY + 58}" text-anchor="middle" font-size="11" fill="#61756d">${period}</text>`
       : '';
-    const tooltip = `${item.title}\n${dateLabel}${readingPeriod ? `\n${readingPeriod}` : ''}`;
+    const tooltip = `${item.title}\n${dateLabel}${readingPeriod ? `\n${readingPeriod}` : ''}\nReading time: ${item.duration || 'Not recorded'}`;
     return `
       <g class="chart-tooltip-target" data-tooltip="${escapeAttr(tooltip)}">
         <path d="M ${item.midpoint} ${itemAxisY} C ${item.midpoint} ${axisY + 30}, ${item.midpoint} ${laneY - 18}, ${item.midpoint} ${laneY + 1}" fill="none" stroke="${item.color}" stroke-width="3" opacity="0.85" />
@@ -1622,9 +1988,10 @@ function renderBookTimelineChart(readings) {
           ? `<line x1="${item.rangeStart}" y1="${itemAxisY}" x2="${item.rangeEnd}" y2="${itemAxisY}" stroke="${item.color}" stroke-width="8" stroke-linecap="round" />`
           : `<rect x="${item.midpoint - 8}" y="${itemAxisY - 8}" width="16" height="16" transform="rotate(45 ${item.midpoint} ${itemAxisY})" fill="${item.color}" />`}
         <rect x="${cardX}" y="${laneY}" width="${cardWidth}" height="${cardHeight}" rx="14" fill="#ffffff" stroke="${item.color}" stroke-width="3" />
-        <text x="${cardX + cardWidth / 2}" y="${laneY + 25}" text-anchor="middle" font-size="15" font-weight="700" fill="#112527">${title}</text>
-        <text x="${cardX + cardWidth / 2}" y="${laneY + 45}" text-anchor="middle" font-size="11" fill="#61756d">${dateText}</text>
+        <text x="${cardX + cardWidth / 2}" y="${laneY + 23}" text-anchor="middle" font-size="15" font-weight="700" fill="#112527">${title}</text>
+        <text x="${cardX + cardWidth / 2}" y="${laneY + 42}" text-anchor="middle" font-size="11" fill="#61756d">${dateText}</text>
         ${periodText}
+        ${durationText}
       </g>
     `;
   }).join('');
@@ -1715,7 +2082,7 @@ function renderReadings(readings) {
       <div class="reading-meta">
         <div class="reading-meta-group reading-meta-primary">
           <span>Finished: ${formatDate(item.date)}</span>
-          <span>Duration: ${item.duration || 'No duration'}</span>
+          <span>Reading time: ${item.duration || 'No reading time'}</span>
         </div>
         <div class="reading-meta-group">
           <span>Started: ${item.startDate ? formatDate(item.startDate) : 'No start date'}</span>
@@ -2139,7 +2506,7 @@ function openExportPicker(event, exportType) {
   const today = new Date().toISOString().slice(0, 10);
   const currentYear = new Date().getFullYear().toString();
   const titles = {
-    dates: ['Download history', 'Choose which daily reading dates to export.'],
+    dates: ['Download history', 'Choose a monthly summary or daily reading dates to export.'],
     books: ['Export reading history', 'Choose which finished book records to export.'],
     timeline: ['Export timeline image', 'Choose which books to include in the timeline image.'],
   };
@@ -2151,6 +2518,20 @@ function openExportPicker(event, exportType) {
     <h4>${title}</h4>
     <p class="export-subtitle">${subtitle}</p>
     <fieldset>
+      ${exportType === 'dates' ? `
+      <label class="export-option">
+        <span class="export-choice">
+          <input type="radio" name="historyView" value="monthly" checked />
+          <span>Monthly summary</span>
+        </span>
+      </label>
+      <label class="export-option">
+        <span class="export-choice">
+          <input type="radio" name="historyView" value="daily" />
+          <span>Daily reading dates</span>
+        </span>
+      </label>
+      ` : ''}
       <label class="export-option">
         <span class="export-choice">
           <input type="radio" name="exportMode" value="all" checked />
@@ -2199,7 +2580,11 @@ function openExportPicker(event, exportType) {
     const end = picker.querySelector('[data-export-end]').value;
     const options = { mode, year, start, end };
     if (!validateExportOptions(options)) return;
-    if (exportType === 'dates') exportDateHistory(options);
+    if (exportType === 'dates') {
+      const historyView = picker.querySelector('input[name="historyView"]:checked').value;
+      if (historyView === 'daily') exportDailyHistory(options);
+      else exportMonthlyHistory(options);
+    }
     if (exportType === 'books') exportBookHistory(options);
     if (exportType === 'timeline') exportBookTimelineImage(options);
     backdrop.remove();
@@ -2258,19 +2643,93 @@ function filterReadingsByExportOptions(readings, options, includeOverlappingRang
   return readings;
 }
 
-function exportDateHistory(options = { mode: 'all' }) {
+function filterManualMonthlyTimeByExportOptions(manualMonthly = {}, options) {
+  return Object.entries(manualMonthly)
+    .filter(([monthKey]) => {
+      if (options.mode === 'year') return monthKey.startsWith(`${options.year}-`);
+      if (options.mode === 'range') return monthKey >= options.start.slice(0, 7) && monthKey <= options.end.slice(0, 7);
+      return true;
+    })
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
+function exportMonthlyHistory(options = { mode: 'all' }) {
   fetch('/api/data')
     .then((r) => r.json())
     .then((data) => {
       const dates = filterDatesByExportOptions(data.checkins || [], options);
+      const manualMonthly = data.manualReadingTime?.monthly || {};
+      const activeMonths = [
+        ...dates.map((date) => date.slice(0, 7)),
+        ...filterManualMonthlyTimeByExportOptions(manualMonthly, options).map(([month]) => month),
+      ].sort();
+      if (!activeMonths.length) {
+        alert('No history to export');
+        return;
+      }
+
+      let monthKeys;
+      if (options.mode === 'year') {
+        monthKeys = Array.from({ length: 12 }, (_, index) => `${options.year}-${String(index + 1).padStart(2, '0')}`);
+      } else if (options.mode === 'range') {
+        const startMonth = options.start.slice(0, 7);
+        const endMonth = options.end.slice(0, 7);
+        const [startYear, startNumber] = startMonth.split('-').map(Number);
+        const [endYear, endNumber] = endMonth.split('-').map(Number);
+        const firstIndex = startYear * 12 + startNumber - 1;
+        const lastIndex = endYear * 12 + endNumber - 1;
+        monthKeys = Array.from({ length: lastIndex - firstIndex + 1 }, (_, index) => {
+          const monthIndex = firstIndex + index;
+          return `${Math.floor(monthIndex / 12)}-${String((monthIndex % 12) + 1).padStart(2, '0')}`;
+        });
+      } else {
+        const firstMonth = activeMonths[0];
+        const lastMonth = activeMonths[activeMonths.length - 1];
+        const [startYear, startNumber] = firstMonth.split('-').map(Number);
+        const [endYear, endNumber] = lastMonth.split('-').map(Number);
+        const firstIndex = startYear * 12 + startNumber - 1;
+        const lastIndex = endYear * 12 + endNumber - 1;
+        monthKeys = Array.from({ length: lastIndex - firstIndex + 1 }, (_, index) => {
+          const monthIndex = firstIndex + index;
+          return `${Math.floor(monthIndex / 12)}-${String((monthIndex % 12) + 1).padStart(2, '0')}`;
+        });
+      }
+
+      const readDaysByMonth = {};
+      dates.forEach((date) => {
+        const month = date.slice(0, 7);
+        readDaysByMonth[month] = (readDaysByMonth[month] || 0) + 1;
+      });
+      const rows = monthKeys.map((month) => {
+        const readingTimeMinutes = Number(manualMonthly[month]) || 0;
+        return {
+          month,
+          readDays: readDaysByMonth[month] || 0,
+          readingTime: formatDurationMinutes(readingTimeMinutes),
+          readingTimeMinutes,
+        };
+      });
+      const csv = toCSV(rows);
+      if (!csv) return alert('No history to export');
+      download(buildExportFilename('reading-monthly-summary', options, 'csv'), csv);
+    });
+}
+
+function exportDailyHistory(options = { mode: 'all' }) {
+  fetch('/api/data')
+    .then((r) => r.json())
+    .then((data) => {
+      const dates = filterDatesByExportOptions(data.checkins || [], options).sort();
+      if (!dates.length) {
+        alert('No reading dates to export');
+        return;
+      }
       const rows = dates.map((date, index) => ({
         index: index + 1,
         date,
-        weekday: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
+        weekday: new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' }),
       }));
-      const csv = toCSV(rows);
-      if (!csv) return alert('No dates to export');
-      download(buildExportFilename('reading-dates', options, 'csv'), csv);
+      download(buildExportFilename('reading-daily-dates', options, 'csv'), toCSV(rows));
     });
 }
 
@@ -2285,7 +2744,8 @@ function exportBookHistory(options = { mode: 'all' }) {
         startDate: r.startDate || '',
         date: r.date,
         readingPeriod: getInclusiveReadingDays(r.startDate, r.date),
-        duration: r.duration || '',
+        readingTime: r.duration || '',
+        readingTimeMinutes: getDurationMinutes(r.duration),
         notes: r.notes || '',
       }));
       const csv = toCSV(rows);

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'reading-tracker-v105';
+const CACHE_NAME = 'reading-tracker-v136';
 const ASSETS = [
   '/',
   'styles.css',

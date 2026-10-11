@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#10a57b" />
   <title>Reading Tracker</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=108" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=136" />
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}" />
 </head>
 <body>
@@ -104,7 +104,12 @@
       <div class="summary-card library-chart-card">
         <div class="chart-header">
           <h3>Book reading timeline</h3>
-          <button type="button" id="exportBookTimelineImage" class="secondary-button chart-action-button">Export image</button>
+          <button type="button" id="exportBookTimelineImage" class="secondary-button chart-action-button" aria-label="Export book reading timeline as an image">
+            <svg aria-hidden="true" viewBox="0 0 20 20" focusable="false">
+              <path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3 13.5v3h14v-3" />
+            </svg>
+            <span>Export image</span>
+          </button>
         </div>
         <div id="bookTimelineChart" class="library-chart library-timeline-chart"></div>
       </div>
@@ -117,7 +122,7 @@
             <input type="text" id="bookTitle" placeholder="Enter book title" required />
           </label>
           <label class="duration-label">
-            Duration
+            Reading time
             <div class="duration-inputs">
               <input type="number" id="readingDurationHours" placeholder="hours" min="0" />
               <input type="number" id="readingDurationMinutes" placeholder="mins" min="0" max="59" />
@@ -171,6 +176,6 @@
     </section>
   </div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=108"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=136"></script>
 </body>
 </html>
