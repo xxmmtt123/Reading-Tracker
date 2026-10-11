@@ -1,4 +1,8 @@
 {
   "readings": [],
-  "checkins": []
+  "checkins": [],
+  "manualReadingTime": {
+    "yearly": {},
+    "monthly": {}
+  }
 }
