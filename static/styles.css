@@ -97,6 +97,11 @@ h1 { margin: 0; font-size: clamp(2rem, 2.5vw, 2.85rem); }
 .library-chart-card .chart-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
 .library-chart-card h3 { margin: 0; font-size: 1.05rem; }
 .library-chart-card .chart-subtitle { margin: 4px 0 0; color: #5f746d; font-size: 0.9rem; }
+.timeline-chart-controls { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.secondary-button.timeline-zoom-button { min-width: 40px; padding: 8px 12px; font-size: 1.15rem; line-height: 1; }
+.secondary-button.timeline-zoom-reset { padding: 9px 12px; }
+.timeline-zoom-level { min-width: 42px; color: #1a5c47; font-size: 0.85rem; font-weight: 800; text-align: center; }
+.secondary-button.timeline-zoom-button:disabled { opacity: 0.45; cursor: default; transform: none; }
 .secondary-button.chart-action-button {
   display: inline-flex;
   align-items: center;
@@ -160,7 +165,7 @@ h1 { margin: 0; font-size: clamp(2rem, 2.5vw, 2.85rem); }
   display: block;
   width: auto;
   max-width: none;
-  min-width: 1320px;
+  min-width: 0;
   height: auto;
 }
 .checkin-card h2,

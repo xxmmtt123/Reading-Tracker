@@ -30,6 +30,7 @@ const totalBooks = document.getElementById('totalBooks');
 const booksThisYear = document.getElementById('booksThisYear');
 const libraryChart = document.getElementById('libraryChart');
 const bookTimelineChart = document.getElementById('bookTimelineChart');
+let bookTimelineZoom = 1;
 const summaryDays = document.getElementById('summaryDays');
 const summaryRate = document.getElementById('summaryRate');
 const summaryStreak = document.getElementById('summaryStreak');
@@ -690,10 +691,7 @@ function renderTrendChart({ items, xAxisLabel, yAxisLabel, itemLabel, pointLabel
     const y = padding + innerHeight - (item.readDays / maxValue) * innerHeight;
     return { ...item, x, y };
   });
-  const currentYear = new Date().getFullYear().toString();
-  const currentMonth = `${currentYear}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}`;
-  const currentKey = xAxisLabel === 'Month' ? currentMonth : currentYear;
-  const defaultPoint = [...points].reverse().find((point) => point.key <= currentKey) || points[points.length - 1];
+  const defaultPoint = points[points.length - 1];
 
   const linePath = points
     .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
@@ -781,15 +779,22 @@ function renderPeriodMetricChart({ items, metric, xAxisLabel, itemLabel, ariaLab
     const y = isTimeOnly ? timeY : countY;
     return { ...item, x, y, countY, timeY };
   });
-  const today = new Date();
-  const currentKey = xAxisLabel === 'Month'
-    ? `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}`
-    : today.getFullYear().toString();
-  const defaultPoint = [...points].reverse().find((point) => point.key <= currentKey) || points[points.length - 1];
+  const defaultPoint = points[points.length - 1];
 
-  const lineFor = (valueKey) => points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${valueKey === 'time' ? point.timeY : point.countY}`)
-    .join(' ');
+  const lineFor = (valueKey) => {
+    let previousTimePointIsMissing = true;
+    return points.map((point, index) => {
+      if (valueKey === 'time' && !(point.minutes > 0)) {
+        previousTimePointIsMissing = true;
+        return '';
+      }
+      const startsSegment = valueKey === 'time'
+        ? previousTimePointIsMissing
+        : index === 0;
+      previousTimePointIsMissing = false;
+      return `${startsSegment ? 'M' : 'L'} ${point.x} ${valueKey === 'time' ? point.timeY : point.countY}`;
+    }).filter(Boolean).join(' ');
+  };
 
   const gridLines = [0, 0.25, 0.5, 0.75, 1].map((t) => {
     const y = topPadding + t * innerHeight;
@@ -832,7 +837,7 @@ function renderPeriodMetricChart({ items, metric, xAxisLabel, itemLabel, ariaLab
   }).join('');
 
   const timeNodes = points.map((point, index) => {
-    const showTimeLabel = isMonthly || (point.minutes || 0) > 0;
+    if (!(point.minutes > 0)) return '';
     const labelText = formatDurationMinutes(point.minutes || 0);
     const timeStartLabel = !isMonthly && point.key === '2023' && point.timeStartMonth
       ? new Intl.DateTimeFormat('en-US', { month: 'short' }).format(new Date(Number(point.timeStartMonth.slice(0, 4)), Number(point.timeStartMonth.slice(5)) - 1, 1))
@@ -858,13 +863,12 @@ function renderPeriodMetricChart({ items, metric, xAxisLabel, itemLabel, ariaLab
         <circle cx="${point.x}" cy="${point.timeY}" r="10" fill="transparent" />
         <circle cx="${point.x}" cy="${point.timeY}" r="5" fill="#2f8fb5" />
       </g>
-      ${showTimeLabel ? `
-        <g aria-hidden="true">
-          <text x="${timeLabelX}" y="${timeLabelY}" text-anchor="${timeAnchor}" font-size="11" font-weight="800" fill="#256b86" stroke="white" stroke-width="4" stroke-linejoin="round" paint-order="stroke">
-            <tspan x="${timeLabelX}">${labelText}</tspan>
-            ${timeStartLabel ? `<tspan x="${timeLabelX}" dy="12" font-size="9.5" font-weight="700">from ${timeStartLabel}</tspan>` : ''}
-          </text>
-        </g>` : ''}`;
+      <g aria-hidden="true">
+        <text x="${timeLabelX}" y="${timeLabelY}" text-anchor="${timeAnchor}" font-size="11" font-weight="800" fill="#256b86" stroke="white" stroke-width="4" stroke-linejoin="round" paint-order="stroke">
+          <tspan x="${timeLabelX}">${labelText}</tspan>
+          ${timeStartLabel ? `<tspan x="${timeLabelX}" dy="12" font-size="9.5" font-weight="700">from ${timeStartLabel}</tspan>` : ''}
+        </text>
+      </g>`;
   }).join('');
 
   const legend = isBoth ? `
@@ -981,11 +985,7 @@ function renderWeeklyCompletionChart(data, startIso, endIso) {
     const y = padding + innerHeight - (item.rate / 100) * innerHeight;
     return { ...item, x, y };
   });
-  const todayIso = formatDateISO(new Date());
-  const defaultPoint = [...points].reverse().find((point) => {
-    const [start, end] = point.dateRange.split(' to ');
-    return start <= todayIso && todayIso <= end;
-  }) || points[points.length - 1];
+  const defaultPoint = points[points.length - 1];
 
   const linePath = points
     .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
@@ -1902,14 +1902,14 @@ function renderBookTimelineChart(readings) {
   const leftPadding = 96;
   const rightPadding = 96;
   const axisY = 56;
-  const laneTop = 116;
+  let laneTop = 116;
   const laneGap = 112;
   const cardWidth = 360;
   const cardHeight = 92;
   const innerWidth = svgWidth - leftPadding - rightPadding;
   const xForDate = (date) => leftPadding + ((date.getTime() - minTime) / (maxTime - minTime)) * innerWidth;
   const lanes = [];
-  const axisOffsets = [-16, -8, 0, 8, 16];
+  const axisLanes = [];
 
   const positioned = items.map((item, index) => {
     const startDate = item.start || item.end;
@@ -1919,6 +1919,16 @@ function renderBookTimelineChart(readings) {
     const rangeStart = Math.min(startX, endX);
     const rangeEnd = Math.max(startX, endX);
     const midpoint = rangeStart + Math.max(rangeEnd - rangeStart, 8) / 2;
+    const barStart = Math.min(rangeStart - 4, midpoint - 8);
+    const barEnd = Math.max(rangeEnd + 4, midpoint + 8);
+    let axisLane = axisLanes.findIndex((intervals) => intervals.every(
+      (interval) => barStart > interval.end + 8 || barEnd < interval.start - 8
+    ));
+    if (axisLane === -1) {
+      axisLane = axisLanes.length;
+      axisLanes.push([]);
+    }
+    axisLanes[axisLane].push({ start: barStart, end: barEnd });
     const labelStart = midpoint - cardWidth / 2;
     const labelEnd = midpoint + cardWidth / 2;
     let lane = lanes.findIndex((laneEnd) => labelStart > laneEnd + 28);
@@ -1932,7 +1942,7 @@ function renderBookTimelineChart(readings) {
       ...item,
       color: colors[index % colors.length],
       lane,
-      axisOffset: axisOffsets[index % axisOffsets.length],
+      axisOffset: -16 + axisLane * 12,
       startX,
       endX,
       rangeStart,
@@ -1941,6 +1951,7 @@ function renderBookTimelineChart(readings) {
     };
   });
 
+  laneTop = Math.max(laneTop, axisY + 12 - 16 + (axisLanes.length - 1) * 12 + 32);
   const svgHeight = Math.max(350, laneTop + lanes.length * laneGap + 28);
   const firstTickDate = new Date(minTime);
   firstTickDate.setDate(1);
@@ -1997,7 +2008,7 @@ function renderBookTimelineChart(readings) {
   }).join('');
 
   bookTimelineChart.innerHTML = `
-    <svg class="interval-timeline" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" style="width: ${svgWidth}px; height: ${svgHeight}px; max-width: none;" aria-label="Book interval timeline chart">
+    <svg class="interval-timeline" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" style="width: ${Math.round(svgWidth * bookTimelineZoom)}px; height: ${Math.round(svgHeight * bookTimelineZoom)}px; max-width: none;" aria-label="Book interval timeline chart">
       ${ticks}
       <line x1="${leftPadding}" y1="${axisY + 12}" x2="${svgWidth - rightPadding}" y2="${axisY + 12}" stroke="#203c31" stroke-width="2" />
       ${nodes}
@@ -2008,7 +2019,7 @@ function renderBookTimelineChart(readings) {
     defaultDate.setMonth(defaultDate.getMonth() - 3);
     defaultDate.setHours(0, 0, 0, 0);
     const boundedDefaultDate = new Date(Math.max(minTime, Math.min(maxTime, defaultDate.getTime())));
-    const targetX = xForDate(boundedDefaultDate);
+    const targetX = xForDate(boundedDefaultDate) * bookTimelineZoom;
     const maxScrollLeft = Math.max(0, bookTimelineChart.scrollWidth - bookTimelineChart.clientWidth);
     bookTimelineChart.scrollLeft = Math.max(0, Math.min(maxScrollLeft, targetX - bookTimelineChart.clientWidth / 2));
   });
@@ -2274,18 +2285,34 @@ function submitReading(event) {
   if (!payload.title || !payload.date) return;
   if (editingId) payload.id = editingId;
 
+  const originalButtonText = saveReadingButton.textContent;
+  saveReadingButton.disabled = true;
+  saveReadingButton.textContent = 'Saving…';
   fetch('/api/reading', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-    .then((response) => response.json())
+    .then(async (response) => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'The server rejected this reading.');
+      return data;
+    })
     .then((data) => {
       currentData = data;
       renderReadings(data.readings);
       updateSummary(data.readings);
       if (analysisVisible) renderMonthlyAnalysis(data);
       resetReadingForm();
+    })
+    .catch((error) => {
+      alert(`Reading was not saved: ${error.message || 'Please check your connection and try again.'}`);
+    })
+    .finally(() => {
+      saveReadingButton.disabled = false;
+      if (editingId || saveReadingButton.textContent === 'Saving…') {
+        saveReadingButton.textContent = originalButtonText;
+      }
     });
 }
 
@@ -2357,6 +2384,20 @@ window.addEventListener('DOMContentLoaded', () => {
   if (dataAnalysisBtn) dataAnalysisBtn.addEventListener('click', showDataAnalysis);
   if (exportBookHistoryBtn) exportBookHistoryBtn.addEventListener('click', (event) => openExportPicker(event, 'books'));
   if (exportBookTimelineImageBtn) exportBookTimelineImageBtn.addEventListener('click', (event) => openExportPicker(event, 'timeline'));
+  const timelineZoomInBtn = document.getElementById('timelineZoomIn');
+  const timelineZoomOutBtn = document.getElementById('timelineZoomOut');
+  const timelineZoomResetBtn = document.getElementById('timelineZoomReset');
+  function setBookTimelineZoom(nextZoom) {
+    bookTimelineZoom = Math.max(0.5, Math.min(3, Math.round(nextZoom * 10) / 10));
+    const zoomLabel = document.getElementById('timelineZoomLevel');
+    if (zoomLabel) zoomLabel.textContent = `${Math.round(bookTimelineZoom * 100)}%`;
+    if (timelineZoomInBtn) timelineZoomInBtn.disabled = bookTimelineZoom >= 3;
+    if (timelineZoomOutBtn) timelineZoomOutBtn.disabled = bookTimelineZoom <= 0.5;
+    renderBookTimelineChart(currentData.readings || []);
+  }
+  if (timelineZoomInBtn) timelineZoomInBtn.addEventListener('click', () => setBookTimelineZoom(bookTimelineZoom + 0.25));
+  if (timelineZoomOutBtn) timelineZoomOutBtn.addEventListener('click', () => setBookTimelineZoom(bookTimelineZoom - 0.25));
+  if (timelineZoomResetBtn) timelineZoomResetBtn.addEventListener('click', () => setBookTimelineZoom(1));
 
   const setupDateField = (textInput, dateInput) => {
     if (!textInput || !dateInput) return;

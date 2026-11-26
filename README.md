@@ -83,8 +83,11 @@ If port `5000` is already in use:
 
 ```bash
 PORT=5001 python3 app.py
-PORT=5001 python app.py
+PORT=5001 python app.py‘
 ```
+
+6. Close
+Control + C
 
 ## Project Structure
 

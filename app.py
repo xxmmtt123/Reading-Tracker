@@ -1,10 +1,13 @@
 from datetime import date, datetime, timedelta
 import json
 import os
+import tempfile
+from threading import RLock
 
 from flask import Flask, jsonify, render_template, request
 
-DATA_FILE = 'data.json'
+DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
+DATA_LOCK = RLock()
 app = Flask(__name__, static_folder='static', static_url_path='')
 
 
@@ -34,8 +37,20 @@ def save_data(data):
         key=lambda item: datetime.fromisoformat(item['date']),
         reverse=True,
     )
-    with open(DATA_FILE, 'w', encoding='utf-8') as file:
-        json.dump(data, file, ensure_ascii=False, indent=2)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w', encoding='utf-8', dir=os.path.dirname(DATA_FILE),
+            prefix='.data-', suffix='.tmp', delete=False,
+        ) as file:
+            temp_path = file.name
+            json.dump(data, file, ensure_ascii=False, indent=2)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temp_path, DATA_FILE)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
 
 
 def get_today_key():
@@ -125,15 +140,16 @@ def get_data():
 @app.route('/api/checkin', methods=['POST'])
 def toggle_checkin():
     payload = request.get_json(silent=True) or {}
-    data = load_data()
-    date_key = payload.get('date') or get_today_key()
-    if date_key in data['checkins']:
-        data['checkins'].remove(date_key)
-    else:
-        data['checkins'].append(date_key)
-    # keep checkins unique and sorted
-    data['checkins'] = sorted(set(data['checkins']))
-    save_data(data)
+    with DATA_LOCK:
+        data = load_data()
+        date_key = payload.get('date') or get_today_key()
+        if date_key in data['checkins']:
+            data['checkins'].remove(date_key)
+        else:
+            data['checkins'].append(date_key)
+        # keep checkins unique and sorted
+        data['checkins'] = sorted(set(data['checkins']))
+        save_data(data)
     return jsonify(data)
 
 
@@ -143,37 +159,40 @@ def add_or_update_reading():
     if not payload or 'title' not in payload or 'date' not in payload:
         return jsonify({'message': 'Missing title or date'}), 400
 
-    data = load_data()
-    if 'id' in payload and payload.get('id') is not None:
-        for item in data['readings']:
-            if item['id'] == payload['id']:
-                item.update({
-                    'title': payload['title'].strip(),
-                    'duration': payload.get('duration', '').strip(),
-                    'startDate': payload.get('startDate', '').strip(),
-                    'date': payload['date'],
-                    'notes': payload.get('notes', '').strip(),
-                })
-                break
-    else:
-        new_id = int(datetime.now().timestamp() * 1000)
-        data['readings'].append({
-            'id': new_id,
-            'title': payload['title'].strip(),
-            'duration': payload.get('duration', '').strip(),
-            'startDate': payload.get('startDate', '').strip(),
-            'date': payload['date'],
-            'notes': payload.get('notes', '').strip(),
-        })
+    with DATA_LOCK:
+        data = load_data()
+        if 'id' in payload and payload.get('id') is not None:
+            for item in data['readings']:
+                if item['id'] == payload['id']:
+                    item.update({
+                        'title': payload['title'].strip(),
+                        'duration': payload.get('duration', '').strip(),
+                        'startDate': payload.get('startDate', '').strip(),
+                        'date': payload['date'],
+                        'notes': payload.get('notes', '').strip(),
+                    })
+                    break
+        else:
+            new_id = max(
+                int(item.get('id', 0)) for item in data['readings']
+            ) + 1 if data['readings'] else int(datetime.now().timestamp() * 1000)
+            data['readings'].append({
+                'id': new_id,
+                'title': payload['title'].strip(),
+                'duration': payload.get('duration', '').strip(),
+                'startDate': payload.get('startDate', '').strip(),
+                'date': payload['date'],
+                'notes': payload.get('notes', '').strip(),
+            })
 
-    # keep readings sorted from newest to oldest by date
-    data['readings'] = sorted(
-        data['readings'],
-        key=lambda item: datetime.fromisoformat(item['date']),
-        reverse=True,
-    )
+        # keep readings sorted from newest to oldest by date
+        data['readings'] = sorted(
+            data['readings'],
+            key=lambda item: datetime.fromisoformat(item['date']),
+            reverse=True,
+        )
 
-    save_data(data)
+        save_data(data)
     return jsonify(data)
 
 
@@ -189,32 +208,35 @@ def save_analysis_time():
     if minutes < 0:
         return jsonify({'message': 'Reading time cannot be negative'}), 400
 
-    data = load_data()
-    data.setdefault('manualReadingTime', {'yearly': {}, 'monthly': {}})
-    data['manualReadingTime'].setdefault(range_type, {})
+    with DATA_LOCK:
+        data = load_data()
+        data.setdefault('manualReadingTime', {'yearly': {}, 'monthly': {}})
+        data['manualReadingTime'].setdefault(range_type, {})
 
-    if minutes:
-        data['manualReadingTime'][range_type][key] = minutes
-    else:
-        data['manualReadingTime'][range_type].pop(key, None)
+        if minutes:
+            data['manualReadingTime'][range_type][key] = minutes
+        else:
+            data['manualReadingTime'][range_type].pop(key, None)
 
-    save_data(data)
+        save_data(data)
     return jsonify(data)
 
 
 @app.route('/api/reading/<int:reading_id>', methods=['DELETE'])
 def delete_reading(reading_id):
-    data = load_data()
-    data['readings'] = [item for item in data['readings'] if item['id'] != reading_id]
-    save_data(data)
+    with DATA_LOCK:
+        data = load_data()
+        data['readings'] = [item for item in data['readings'] if item['id'] != reading_id]
+        save_data(data)
     return jsonify(data)
 
 
 @app.route('/api/clear-readings', methods=['POST'])
 def clear_readings():
-    data = load_data()
-    data['readings'] = []
-    save_data(data)
+    with DATA_LOCK:
+        data = load_data()
+        data['readings'] = []
+        save_data(data)
     return jsonify(data)
 
 
